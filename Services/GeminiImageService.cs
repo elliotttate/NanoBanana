@@ -12,6 +12,19 @@ public sealed class GeminiImageService
     private const int GenerationCount = 4;
     private const string ModelName = "gemini-3-pro-image-preview";
     private const int MaxNetworkAttempts = 3;
+    private static readonly IReadOnlyList<string> SupportedAspectRatios =
+    [
+        "1:1",
+        "2:3",
+        "3:2",
+        "3:4",
+        "4:3",
+        "4:5",
+        "5:4",
+        "9:16",
+        "16:9",
+        "21:9",
+    ];
 
     private readonly HttpClient _httpClient;
 
@@ -33,10 +46,14 @@ public sealed class GeminiImageService
             throw new InvalidOperationException("Missing Gemini API key.");
         }
 
+        var sourceBytes = Convert.FromBase64String(base64Data);
+        var (sourceWidth, sourceHeight) = await ImageDataHelpers.GetImageDimensionsAsync(sourceBytes, cancellationToken);
+        var aspectRatio = ResolveRequestedAspectRatio(sourceWidth, sourceHeight);
+
         var requestUrl = $"https://generativelanguage.googleapis.com/v1beta/models/{ModelName}:generateContent?key={Uri.EscapeDataString(apiKey)}";
 
         var generationTasks = Enumerable.Range(0, GenerationCount)
-            .Select(_ => GenerateSingleImageAsync(requestUrl, base64Data, mimeType, prompt, imageSize, cancellationToken))
+            .Select(_ => GenerateSingleImageAsync(requestUrl, base64Data, mimeType, prompt, imageSize, aspectRatio, cancellationToken))
             .Select(WrapResultAsync);
 
         var settledResults = await Task.WhenAll(generationTasks);
@@ -47,7 +64,18 @@ public sealed class GeminiImageService
 
         if (imageUrls.Count > 0)
         {
-            return imageUrls;
+            var normalizedResults = new List<string>(imageUrls.Count);
+            foreach (var imageUrl in imageUrls)
+            {
+                var normalizedDataUrl = await ImageDataHelpers.EnsureDataUrlAspectRatioAsync(
+                    imageUrl,
+                    sourceWidth,
+                    sourceHeight,
+                    cancellationToken);
+                normalizedResults.Add(normalizedDataUrl);
+            }
+
+            return normalizedResults;
         }
 
         var errors = settledResults
@@ -68,14 +96,15 @@ public sealed class GeminiImageService
         string mimeType,
         string prompt,
         string imageSize,
+        string aspectRatio,
         CancellationToken cancellationToken)
     {
-        var generationConfigPayload = CreatePayloadJson(useConfigField: false, base64Data, mimeType, prompt, imageSize);
+        var generationConfigPayload = CreatePayloadJson(useConfigField: false, base64Data, mimeType, prompt, imageSize, aspectRatio);
         var response = await SendGenerateRequestAsync(requestUrl, generationConfigPayload, cancellationToken);
 
         if (!response.Success && IsUnknownPayloadFieldError(response.Body, "generationConfig"))
         {
-            var configPayload = CreatePayloadJson(useConfigField: true, base64Data, mimeType, prompt, imageSize);
+            var configPayload = CreatePayloadJson(useConfigField: true, base64Data, mimeType, prompt, imageSize, aspectRatio);
             response = await SendGenerateRequestAsync(requestUrl, configPayload, cancellationToken);
         }
 
@@ -99,7 +128,8 @@ public sealed class GeminiImageService
         string base64Data,
         string mimeType,
         string prompt,
-        string imageSize)
+        string imageSize,
+        string aspectRatio)
     {
         var payload = new JsonObject
         {
@@ -130,12 +160,50 @@ public sealed class GeminiImageService
         {
             ["imageConfig"] = new JsonObject
             {
-                ["imageSize"] = imageSize
+                ["imageSize"] = imageSize,
+                ["aspectRatio"] = aspectRatio
             }
         };
 
         payload[useConfigField ? "config" : "generationConfig"] = configNode;
         return payload.ToJsonString();
+    }
+
+    private static string ResolveRequestedAspectRatio(int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            return "1:1";
+        }
+
+        var divisor = Gcd(width, height);
+        var reducedWidth = width / divisor;
+        var reducedHeight = height / divisor;
+        var reducedRatio = $"{reducedWidth}:{reducedHeight}";
+
+        if (SupportedAspectRatios.Any(candidate => string.Equals(candidate, reducedRatio, StringComparison.Ordinal)))
+        {
+            return reducedRatio;
+        }
+
+        var supported = string.Join(", ", SupportedAspectRatios);
+        throw new InvalidOperationException(
+            $"Source image aspect ratio {reducedRatio} is not supported by Gemini API. " +
+            $"Supported ratios: {supported}. Generation cancelled to avoid spending credits on mismatched sizes.");
+    }
+
+    private static int Gcd(int left, int right)
+    {
+        left = Math.Abs(left);
+        right = Math.Abs(right);
+        while (right != 0)
+        {
+            var temp = left % right;
+            left = right;
+            right = temp;
+        }
+
+        return left == 0 ? 1 : left;
     }
 
     private async Task<ApiCallResult> SendGenerateRequestAsync(string requestUrl, string payloadJson, CancellationToken cancellationToken)

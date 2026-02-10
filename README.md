@@ -5,12 +5,20 @@ A dark-theme WinUI 3 desktop app that reproduces the core functionality of `nano
 ## Feature parity
 
 - Single image editing with Gemini 3 Pro Image.
-- Batch ZIP processing for image folders (`.jpg`, `.jpeg`, `.png`, `.webp`).
+- Batch folder processing (`.jpg`, `.jpeg`, `.png`, `.webp`) with recursive subfolder support.
+- Incremental batch runs that process only new/changed files.
+- Persistent processing index so folder history is remembered across app restarts/folder switching.
+- Process mode for reviewing generated `variation_1..4` outputs, comparing against originals, and choosing the best image.
+- Per-selection notes + transparency flag saved into output file metadata.
+- Background redo queue in Process mode to regenerate and continue reviewing the next item.
 - 4 generated variations per source image.
+- Aspect ratio lock: generated outputs are normalized to the source image aspect ratio in single, batch, and process redo flows.
 - Resolution options: `1K`, `2K`, `4K`.
 - Before/after comparison slider in single-image mode.
 - Save selected single variation to disk.
-- Export all batch results as a ZIP archive.
+- Batch outputs written to a sibling `*_processed` folder while preserving source subfolder structure.
+- Process selections written to a sibling `*_selected` folder while preserving source subfolder structure.
+- Export current batch run results as a ZIP archive.
 - Timestamped log console with severity coloring and clear action.
 - Rotating loading status messages during generation.
 

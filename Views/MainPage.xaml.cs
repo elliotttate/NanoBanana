@@ -73,6 +73,13 @@ public partial class MainPage : Page
         UpdateComparisonVisuals();
     }
 
+    private void ProcessModeToggle_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.SwitchMode(AppMode.Process);
+        SyncModeToggles();
+        UpdateComparisonVisuals();
+    }
+
     private async void UploadButton_Click(object sender, RoutedEventArgs e)
     {
         if (ViewModel.IsSingleMode)
@@ -84,12 +91,21 @@ public partial class MainPage : Page
                 UpdateComparisonVisuals();
             }
         }
+        else if (ViewModel.IsBatchMode)
+        {
+            var folder = await PickFolderAsync();
+            if (folder is not null)
+            {
+                await ViewModel.LoadBatchFolderAsync(folder);
+            }
+        }
         else
         {
-            var zipFile = await PickZipFileAsync();
-            if (zipFile is not null)
+            var folder = await PickFolderAsync();
+            if (folder is not null)
             {
-                await ViewModel.LoadBatchZipAsync(zipFile);
+                await ViewModel.LoadProcessFolderAsync(folder);
+                UpdateComparisonVisuals();
             }
         }
     }
@@ -107,12 +123,25 @@ public partial class MainPage : Page
             return;
         }
 
+        if (ViewModel.IsProcessMode)
+        {
+            await ViewModel.SaveProcessSelectionAndAdvanceAsync();
+            UpdateComparisonVisuals();
+            return;
+        }
+
         var (mimeType, _) = ImageDataHelpers.ParseDataUrl(ViewModel.SelectedGeneratedImage.DataUrl);
         var imageFile = await PickSaveImageFileAsync(ViewModel.OriginalFileName, mimeType);
         if (imageFile is not null)
         {
             await ViewModel.SaveSelectedImageAsync(imageFile);
         }
+    }
+
+    private async void RedoAndNextButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ViewModel.RedoProcessSelectionAndAdvanceAsync();
+        UpdateComparisonVisuals();
     }
 
     private async void DownloadBatchButton_Click(object sender, RoutedEventArgs e)
@@ -284,16 +313,16 @@ public partial class MainPage : Page
         return await picker.PickSingleFileAsync();
     }
 
-    private async Task<StorageFile?> PickZipFileAsync()
+    private async Task<StorageFolder?> PickFolderAsync()
     {
-        var picker = new FileOpenPicker
+        var picker = new FolderPicker
         {
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary
+            SuggestedStartLocation = PickerLocationId.PicturesLibrary
         };
 
-        picker.FileTypeFilter.Add(".zip");
+        picker.FileTypeFilter.Add("*");
         InitializePicker(picker);
-        return await picker.PickSingleFileAsync();
+        return await picker.PickSingleFolderAsync();
     }
 
     private async Task<StorageFile?> PickSaveImageFileAsync(string originalFileName, string mimeType)
@@ -450,13 +479,14 @@ public partial class MainPage : Page
 
     private void SyncModeToggles()
     {
-        if (SingleModeToggle is null || BatchModeToggle is null)
+        if (SingleModeToggle is null || BatchModeToggle is null || ProcessModeToggle is null)
         {
             return;
         }
 
         SingleModeToggle.IsChecked = ViewModel.IsSingleMode;
         BatchModeToggle.IsChecked = ViewModel.IsBatchMode;
+        ProcessModeToggle.IsChecked = ViewModel.IsProcessMode;
     }
 
     private void MainAppWindow_SizeChanged(object sender, WindowSizeChangedEventArgs args)

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices.WindowsRuntime;
+using Windows.Graphics.Imaging;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Storage.Streams;
 
@@ -83,5 +84,124 @@ public static class ImageDataHelpers
         stream.Seek(0);
         await image.SetSourceAsync(stream);
         return image;
+    }
+
+    public static async Task<(int Width, int Height)> GetImageDimensionsAsync(byte[] imageBytes, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var stream = new InMemoryRandomAccessStream();
+        await stream.WriteAsync(imageBytes.AsBuffer());
+        stream.Seek(0);
+        var decoder = await BitmapDecoder.CreateAsync(stream);
+        return ((int)decoder.PixelWidth, (int)decoder.PixelHeight);
+    }
+
+    public static async Task<string> EnsureDataUrlAspectRatioAsync(
+        string dataUrl,
+        int targetWidth,
+        int targetHeight,
+        CancellationToken cancellationToken = default)
+    {
+        if (targetWidth <= 0 || targetHeight <= 0)
+        {
+            return dataUrl;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var (mimeType, base64Data) = ParseDataUrl(dataUrl);
+        var imageBytes = Convert.FromBase64String(base64Data);
+
+        using var sourceStream = new InMemoryRandomAccessStream();
+        await sourceStream.WriteAsync(imageBytes.AsBuffer());
+        sourceStream.Seek(0);
+
+        var decoder = await BitmapDecoder.CreateAsync(sourceStream);
+        var sourceWidth = decoder.PixelWidth;
+        var sourceHeight = decoder.PixelHeight;
+        if (sourceWidth == 0 || sourceHeight == 0)
+        {
+            return dataUrl;
+        }
+
+        var sourceAspect = (double)sourceWidth / sourceHeight;
+        var targetAspect = (double)targetWidth / targetHeight;
+
+        if (Math.Abs(sourceAspect - targetAspect) <= 0.01d)
+        {
+            return dataUrl;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        uint cropWidth;
+        uint cropHeight;
+        uint cropX;
+        uint cropY;
+
+        if (sourceAspect > targetAspect)
+        {
+            cropHeight = sourceHeight;
+            cropWidth = (uint)Math.Max(1, Math.Round(cropHeight * targetAspect));
+            cropX = (sourceWidth - cropWidth) / 2;
+            cropY = 0;
+        }
+        else
+        {
+            cropWidth = sourceWidth;
+            cropHeight = (uint)Math.Max(1, Math.Round(cropWidth / targetAspect));
+            cropX = 0;
+            cropY = (sourceHeight - cropHeight) / 2;
+        }
+
+        var transform = new BitmapTransform
+        {
+            Bounds = new BitmapBounds
+            {
+                X = cropX,
+                Y = cropY,
+                Width = Math.Min(cropWidth, sourceWidth - cropX),
+                Height = Math.Min(cropHeight, sourceHeight - cropY)
+            }
+        };
+
+        var croppedBitmap = await decoder.GetSoftwareBitmapAsync(
+            BitmapPixelFormat.Bgra8,
+            BitmapAlphaMode.Premultiplied,
+            transform,
+            ExifOrientationMode.RespectExifOrientation,
+            ColorManagementMode.DoNotColorManage);
+
+        var encoderId = ResolveEncoderId(mimeType, out var outputMimeType);
+
+        using var outputStream = new InMemoryRandomAccessStream();
+        var encoder = await BitmapEncoder.CreateAsync(encoderId, outputStream);
+        encoder.SetSoftwareBitmap(croppedBitmap);
+        await encoder.FlushAsync();
+
+        outputStream.Seek(0);
+        using var netStream = outputStream.AsStreamForRead();
+        using var memoryStream = new MemoryStream();
+        await netStream.CopyToAsync(memoryStream, cancellationToken);
+        var outputBytes = memoryStream.ToArray();
+
+        return BuildDataUrl(outputMimeType, Convert.ToBase64String(outputBytes));
+    }
+
+    private static Guid ResolveEncoderId(string mimeType, out string outputMimeType)
+    {
+        switch (mimeType.ToLowerInvariant())
+        {
+            case "image/jpeg":
+            case "image/jpg":
+                outputMimeType = "image/jpeg";
+                return BitmapEncoder.JpegEncoderId;
+            case "image/png":
+                outputMimeType = "image/png";
+                return BitmapEncoder.PngEncoderId;
+            default:
+                outputMimeType = "image/png";
+                return BitmapEncoder.PngEncoderId;
+        }
     }
 }
