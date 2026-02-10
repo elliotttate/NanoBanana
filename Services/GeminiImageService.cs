@@ -12,18 +12,18 @@ public sealed class GeminiImageService
     private const int GenerationCount = 4;
     private const string ModelName = "gemini-3-pro-image-preview";
     private const int MaxNetworkAttempts = 3;
-    private static readonly IReadOnlyList<string> SupportedAspectRatios =
+    private static readonly IReadOnlyList<(string Ratio, double Value)> SupportedAspectRatios =
     [
-        "1:1",
-        "2:3",
-        "3:2",
-        "3:4",
-        "4:3",
-        "4:5",
-        "5:4",
-        "9:16",
-        "16:9",
-        "21:9",
+        ("1:1", 1d),
+        ("2:3", 2d / 3d),
+        ("3:2", 3d / 2d),
+        ("3:4", 3d / 4d),
+        ("4:3", 4d / 3d),
+        ("4:5", 4d / 5d),
+        ("5:4", 5d / 4d),
+        ("9:16", 9d / 16d),
+        ("16:9", 16d / 9d),
+        ("21:9", 21d / 9d),
     ];
 
     private readonly HttpClient _httpClient;
@@ -181,15 +181,17 @@ public sealed class GeminiImageService
         var reducedHeight = height / divisor;
         var reducedRatio = $"{reducedWidth}:{reducedHeight}";
 
-        if (SupportedAspectRatios.Any(candidate => string.Equals(candidate, reducedRatio, StringComparison.Ordinal)))
+        if (SupportedAspectRatios.Any(candidate => string.Equals(candidate.Ratio, reducedRatio, StringComparison.Ordinal)))
         {
             return reducedRatio;
         }
 
-        var supported = string.Join(", ", SupportedAspectRatios);
-        throw new InvalidOperationException(
-            $"Source image aspect ratio {reducedRatio} is not supported by Gemini API. " +
-            $"Supported ratios: {supported}. Generation cancelled to avoid spending credits on mismatched sizes.");
+        var sourceRatioValue = (double)width / height;
+        var nearest = SupportedAspectRatios
+            .OrderBy(candidate => Math.Abs(candidate.Value - sourceRatioValue))
+            .First();
+
+        return nearest.Ratio;
     }
 
     private static int Gcd(int left, int right)
