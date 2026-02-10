@@ -27,6 +27,7 @@ public sealed class BatchFolderProcessingService
         string sourceFolderPath,
         BatchFileItem sourceFile,
         IReadOnlyList<string> generatedImages,
+        OutputImageFormat outputImageFormat,
         CancellationToken cancellationToken = default)
     {
         if (generatedImages.Count == 0)
@@ -48,7 +49,11 @@ public sealed class BatchFolderProcessingService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var (mimeType, base64Data) = ImageDataHelpers.ParseDataUrl(generatedImages[index]);
+            var outputDataUrl = await ImageDataHelpers.ConvertDataUrlForOutputFormatAsync(
+                generatedImages[index],
+                outputImageFormat,
+                cancellationToken);
+            var (mimeType, base64Data) = ImageDataHelpers.ParseDataUrl(outputDataUrl);
             var extension = ImageDataHelpers.MimeTypeToExtension(mimeType);
             var outputFileName = $"variation_{index + 1}.{extension}";
             var outputAbsolutePath = Path.Combine(outputDirectoryPath, outputFileName);

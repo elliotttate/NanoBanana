@@ -35,12 +35,21 @@ public static class ImageDataHelpers
 
     public static string MimeTypeToExtension(string mimeType)
     {
-        return mimeType.ToLowerInvariant() switch
+        return NormalizeMimeType(mimeType) switch
         {
             "image/jpeg" => "jpg",
-            "image/jpg" => "jpg",
             "image/webp" => "webp",
             _ => "png",
+        };
+    }
+
+    public static string ResolveOutputMimeType(OutputImageFormat outputFormat, string fallbackMimeType)
+    {
+        return outputFormat switch
+        {
+            OutputImageFormat.Jpeg => "image/jpeg",
+            OutputImageFormat.Png => "image/png",
+            _ => NormalizeMimeType(fallbackMimeType)
         };
     }
 
@@ -74,6 +83,60 @@ public static class ImageDataHelpers
         var parsed = ParseDataUrl(dataUrl);
         mimeType = parsed.MimeType;
         return Convert.FromBase64String(parsed.Base64Data);
+    }
+
+    public static async Task<string> ConvertDataUrlForOutputFormatAsync(
+        string dataUrl,
+        OutputImageFormat outputFormat,
+        CancellationToken cancellationToken = default)
+    {
+        if (outputFormat == OutputImageFormat.Auto)
+        {
+            return dataUrl;
+        }
+
+        var (sourceMimeType, sourceBase64Data) = ParseDataUrl(dataUrl);
+        var targetMimeType = ResolveOutputMimeType(outputFormat, sourceMimeType);
+        if (string.Equals(NormalizeMimeType(sourceMimeType), targetMimeType, StringComparison.OrdinalIgnoreCase))
+        {
+            return BuildDataUrl(targetMimeType, sourceBase64Data);
+        }
+
+        var sourceBytes = Convert.FromBase64String(sourceBase64Data);
+        var convertedBytes = await ConvertImageBytesToMimeTypeAsync(sourceBytes, targetMimeType, cancellationToken);
+        return BuildDataUrl(targetMimeType, Convert.ToBase64String(convertedBytes));
+    }
+
+    public static async Task<byte[]> ConvertImageBytesToMimeTypeAsync(
+        byte[] sourceBytes,
+        string targetMimeType,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var sourceStream = new InMemoryRandomAccessStream();
+        await sourceStream.WriteAsync(sourceBytes.AsBuffer());
+        sourceStream.Seek(0);
+
+        var decoder = await BitmapDecoder.CreateAsync(sourceStream);
+        var softwareBitmap = await decoder.GetSoftwareBitmapAsync(
+            BitmapPixelFormat.Bgra8,
+            BitmapAlphaMode.Premultiplied,
+            new BitmapTransform(),
+            ExifOrientationMode.RespectExifOrientation,
+            ColorManagementMode.DoNotColorManage);
+
+        var encoderId = ResolveEncoderId(targetMimeType, out _);
+        using var outputStream = new InMemoryRandomAccessStream();
+        var encoder = await BitmapEncoder.CreateAsync(encoderId, outputStream);
+        encoder.SetSoftwareBitmap(softwareBitmap);
+        await encoder.FlushAsync();
+
+        outputStream.Seek(0);
+        using var netStream = outputStream.AsStreamForRead();
+        using var memoryStream = new MemoryStream();
+        await netStream.CopyToAsync(memoryStream, cancellationToken);
+        return memoryStream.ToArray();
     }
 
     public static async Task<BitmapImage> CreateBitmapImageAsync(byte[] imageBytes)
@@ -190,10 +253,9 @@ public static class ImageDataHelpers
 
     private static Guid ResolveEncoderId(string mimeType, out string outputMimeType)
     {
-        switch (mimeType.ToLowerInvariant())
+        switch (NormalizeMimeType(mimeType))
         {
             case "image/jpeg":
-            case "image/jpg":
                 outputMimeType = "image/jpeg";
                 return BitmapEncoder.JpegEncoderId;
             case "image/png":
@@ -203,5 +265,22 @@ public static class ImageDataHelpers
                 outputMimeType = "image/png";
                 return BitmapEncoder.PngEncoderId;
         }
+    }
+
+    private static string NormalizeMimeType(string mimeType)
+    {
+        if (string.IsNullOrWhiteSpace(mimeType))
+        {
+            return "image/png";
+        }
+
+        return mimeType.Trim().ToLowerInvariant() switch
+        {
+            "image/jpg" => "image/jpeg",
+            "image/jpeg" => "image/jpeg",
+            "image/png" => "image/png",
+            "image/webp" => "image/webp",
+            _ => "image/png"
+        };
     }
 }

@@ -130,8 +130,9 @@ public partial class MainPage : Page
             return;
         }
 
-        var (mimeType, _) = ImageDataHelpers.ParseDataUrl(ViewModel.SelectedGeneratedImage.DataUrl);
-        var imageFile = await PickSaveImageFileAsync(ViewModel.OriginalFileName, mimeType);
+        var (sourceMimeType, _) = ImageDataHelpers.ParseDataUrl(ViewModel.SelectedGeneratedImage.DataUrl);
+        var outputMimeType = ViewModel.ResolveOutputMimeType(sourceMimeType);
+        var imageFile = await PickSaveImageFileAsync(ViewModel.OriginalFileName, outputMimeType);
         if (imageFile is not null)
         {
             await ViewModel.SaveSelectedImageAsync(imageFile);
@@ -179,6 +180,44 @@ public partial class MainPage : Page
             TextWrapping = TextWrapping.Wrap
         });
 
+        var outputFormatComboBox = new ComboBox();
+        outputFormatComboBox.Items.Add(new ComboBoxItem
+        {
+            Content = "JPEG (.jpg)",
+            Tag = OutputImageFormat.Jpeg
+        });
+        outputFormatComboBox.Items.Add(new ComboBoxItem
+        {
+            Content = "PNG (.png)",
+            Tag = OutputImageFormat.Png
+        });
+        outputFormatComboBox.Items.Add(new ComboBoxItem
+        {
+            Content = "Auto (keep generated format)",
+            Tag = OutputImageFormat.Auto
+        });
+
+        foreach (var item in outputFormatComboBox.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag is OutputImageFormat outputImageFormat && outputImageFormat == ViewModel.OutputImageFormat)
+            {
+                outputFormatComboBox.SelectedItem = item;
+                break;
+            }
+        }
+
+        content.Children.Add(new TextBlock
+        {
+            Text = "Output format",
+            FontSize = 15
+        });
+        content.Children.Add(outputFormatComboBox);
+        content.Children.Add(new TextBlock
+        {
+            Text = "Applies to saved images, batch outputs, process selections, and ZIP export.",
+            TextWrapping = TextWrapping.Wrap
+        });
+
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
@@ -193,6 +232,11 @@ public partial class MainPage : Page
         if (result == ContentDialogResult.Primary)
         {
             ViewModel.ApiKey = apiKeyTextBox.Text?.Trim() ?? string.Empty;
+            if (outputFormatComboBox.SelectedItem is ComboBoxItem selectedItem
+                && selectedItem.Tag is OutputImageFormat outputImageFormat)
+            {
+                ViewModel.OutputImageFormat = outputImageFormat;
+            }
         }
     }
 

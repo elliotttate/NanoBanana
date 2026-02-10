@@ -15,6 +15,7 @@ A dark-theme WinUI 3 desktop app that reproduces the core functionality of `nano
 - Aspect ratio lock: generated outputs are normalized to the source image aspect ratio in single, batch, and process redo flows.
 - Resolution options: `1K`, `2K`, `4K`.
 - Before/after comparison slider in single-image mode.
+- Settings option to force output format (`JPG`, `PNG`, or `Auto` keep generated format) across single save, batch, process, and ZIP export.
 - Save selected single variation to disk.
 - Batch outputs written to a sibling `*_processed` folder while preserving source subfolder structure.
 - Process selections written to a sibling `*_selected` folder while preserving source subfolder structure.
@@ -35,6 +36,8 @@ The app resolves API key in this order:
 1. Value entered in **Settings** (Connection API key field).
 2. `GEMINI_API_KEY` environment variable.
 3. `API_KEY` environment variable.
+
+Settings also include output format for all saved/exported images.
 
 ## Build
 

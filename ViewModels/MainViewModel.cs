@@ -14,6 +14,7 @@ public partial class MainViewModel : BaseViewModel
         "NanoBananaProWinUI");
 
     private static readonly string ApiKeyFilePath = Path.Combine(SettingsDirectoryPath, "gemini_api_key.txt");
+    private static readonly string OutputFormatFilePath = Path.Combine(SettingsDirectoryPath, "output_image_format.txt");
 
     private static readonly string[] LoadingMessages =
     {
@@ -127,6 +128,7 @@ public partial class MainViewModel : BaseViewModel
         _loadingMessageTimer.Tick += (_, _) => RotateLoadingMessage();
 
         ApiKey = LoadApiKeyFromSettings();
+        OutputImageFormat = LoadOutputImageFormatFromSettings();
 
         GeneratedImages.CollectionChanged += (_, _) => RefreshComputedProperties();
         BatchFiles.CollectionChanged += (_, _) => RefreshComputedProperties();
@@ -149,6 +151,9 @@ public partial class MainViewModel : BaseViewModel
 
     [ObservableProperty]
     private string _apiKey = string.Empty;
+
+    [ObservableProperty]
+    private OutputImageFormat _outputImageFormat = OutputImageFormat.Jpeg;
 
     [ObservableProperty]
     private string _imageSize = "1K";
@@ -399,6 +404,11 @@ public partial class MainViewModel : BaseViewModel
         ? $"Reviewed {ProcessReviewedCount}/{ProcessTotalCount}  |  Pending {ProcessPendingCount}"
         : string.Empty;
 
+    public string ResolveOutputMimeType(string fallbackMimeType)
+    {
+        return ImageDataHelpers.ResolveOutputMimeType(OutputImageFormat, fallbackMimeType);
+    }
+
     public void SwitchMode(AppMode newMode)
     {
         if (Mode == newMode)
@@ -607,7 +617,10 @@ public partial class MainViewModel : BaseViewModel
 
         try
         {
-            var bytes = ImageDataHelpers.DataUrlToBytes(SelectedGeneratedImage.DataUrl, out _);
+            var outputDataUrl = await ImageDataHelpers.ConvertDataUrlForOutputFormatAsync(
+                SelectedGeneratedImage.DataUrl,
+                OutputImageFormat);
+            var bytes = ImageDataHelpers.DataUrlToBytes(outputDataUrl, out _);
             await FileIO.WriteBytesAsync(destinationFile, bytes);
             AddLog($"Image saved: {destinationFile.Name}", LogType.Info);
         }
@@ -641,7 +654,8 @@ public partial class MainViewModel : BaseViewModel
                 currentItem,
                 selectedVariationIndex,
                 ProcessNotes.Trim(),
-                ProcessTransparency);
+                ProcessTransparency,
+                OutputImageFormat);
 
             if (!currentItem.IsReviewed)
             {
@@ -710,7 +724,7 @@ public partial class MainViewModel : BaseViewModel
 
         try
         {
-            var zipBytes = await _zipProcessingService.CreateBatchZipAsync(_batchResults);
+            var zipBytes = await _zipProcessingService.CreateBatchZipAsync(_batchResults, OutputImageFormat);
             await FileIO.WriteBytesAsync(destinationFile, zipBytes);
             AddLog("ZIP archive downloaded successfully.", LogType.Success);
         }
@@ -841,7 +855,8 @@ public partial class MainViewModel : BaseViewModel
                     var outputRelativePaths = await _batchFolderProcessingService.SaveGeneratedOutputsAsync(
                         BatchSourceFolderPath,
                         file,
-                        images);
+                        images,
+                        OutputImageFormat);
 
                     _batchFolderProcessingService.MarkFileAsProcessed(BatchSourceFolderPath, file, outputRelativePaths);
                     file.IsProcessed = true;
@@ -950,7 +965,11 @@ public partial class MainViewModel : BaseViewModel
                         request.ImageSize,
                         cancellationToken);
 
-                    var variationFilePaths = await _processReviewService.OverwriteVariationsAsync(request.Item, generatedImages, cancellationToken);
+                    var variationFilePaths = await _processReviewService.OverwriteVariationsAsync(
+                        request.Item,
+                        generatedImages,
+                        OutputImageFormat,
+                        cancellationToken);
                     request.Item.VariationFilePaths = variationFilePaths;
                     request.Item.IsReviewed = false;
                     request.Item.SelectedVariationIndex = 0;
@@ -1221,6 +1240,51 @@ public partial class MainViewModel : BaseViewModel
         }
     }
 
+    private static OutputImageFormat LoadOutputImageFormatFromSettings()
+    {
+        try
+        {
+            if (!File.Exists(OutputFormatFilePath))
+            {
+                return OutputImageFormat.Jpeg;
+            }
+
+            var raw = File.ReadAllText(OutputFormatFilePath).Trim();
+            return raw.ToLowerInvariant() switch
+            {
+                "auto" => OutputImageFormat.Auto,
+                "png" => OutputImageFormat.Png,
+                "jpg" => OutputImageFormat.Jpeg,
+                "jpeg" => OutputImageFormat.Jpeg,
+                _ => OutputImageFormat.Jpeg
+            };
+        }
+        catch
+        {
+            return OutputImageFormat.Jpeg;
+        }
+    }
+
+    private static void SaveOutputImageFormatToSettings(OutputImageFormat outputImageFormat)
+    {
+        try
+        {
+            Directory.CreateDirectory(SettingsDirectoryPath);
+            var value = outputImageFormat switch
+            {
+                OutputImageFormat.Auto => "auto",
+                OutputImageFormat.Png => "png",
+                _ => "jpg"
+            };
+
+            File.WriteAllText(OutputFormatFilePath, value);
+        }
+        catch
+        {
+            // Ignore persistence failures; current session still uses the selected format.
+        }
+    }
+
     private void AddLog(string message, LogType type)
     {
         Logs.Add(new LogEntry
@@ -1323,6 +1387,12 @@ public partial class MainViewModel : BaseViewModel
     partial void OnApiKeyChanged(string value)
     {
         SaveApiKeyToSettings(value);
+        RefreshComputedProperties();
+    }
+
+    partial void OnOutputImageFormatChanged(OutputImageFormat value)
+    {
+        SaveOutputImageFormatToSettings(value);
         RefreshComputedProperties();
     }
 

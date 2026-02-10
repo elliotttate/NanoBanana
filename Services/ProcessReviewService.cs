@@ -29,6 +29,7 @@ public sealed class ProcessReviewService
         int selectedVariationIndex,
         string notes,
         bool transparency,
+        OutputImageFormat outputImageFormat,
         CancellationToken cancellationToken = default)
     {
         if (selectedVariationIndex < 1 || selectedVariationIndex > item.VariationFilePaths.Count)
@@ -37,10 +38,14 @@ public sealed class ProcessReviewService
         }
 
         var selectedVariationPath = item.VariationFilePaths[selectedVariationIndex - 1];
-        var selectedExtension = Path.GetExtension(selectedVariationPath);
+        var sourceMimeType = ImageDataHelpers.InferMimeType(selectedVariationPath);
+        var targetMimeType = ImageDataHelpers.ResolveOutputMimeType(outputImageFormat, sourceMimeType);
+        var selectedExtension = outputImageFormat == OutputImageFormat.Auto
+            ? Path.GetExtension(selectedVariationPath)
+            : "." + ImageDataHelpers.MimeTypeToExtension(targetMimeType);
         if (string.IsNullOrWhiteSpace(selectedExtension))
         {
-            selectedExtension = ".png";
+            selectedExtension = "." + ImageDataHelpers.MimeTypeToExtension(targetMimeType);
         }
 
         var destinationPath = BuildSelectionOutputPath(
@@ -54,7 +59,20 @@ public sealed class ProcessReviewService
             Directory.CreateDirectory(destinationDirectory);
         }
 
-        File.Copy(selectedVariationPath, destinationPath, overwrite: true);
+        if (outputImageFormat == OutputImageFormat.Auto)
+        {
+            File.Copy(selectedVariationPath, destinationPath, overwrite: true);
+        }
+        else
+        {
+            var sourceBytes = await File.ReadAllBytesAsync(selectedVariationPath, cancellationToken);
+            var convertedBytes = await ImageDataHelpers.ConvertImageBytesToMimeTypeAsync(
+                sourceBytes,
+                targetMimeType,
+                cancellationToken);
+            await File.WriteAllBytesAsync(destinationPath, convertedBytes, cancellationToken);
+        }
+
         await WriteMetadataAsync(destinationPath, notes, transparency);
 
         var outputRelativePath = Path.GetRelativePath(selectionOutputFolderPath, destinationPath).Replace('\\', '/');
@@ -72,6 +90,7 @@ public sealed class ProcessReviewService
     public async Task<IReadOnlyList<string>> OverwriteVariationsAsync(
         ProcessReviewItem item,
         IReadOnlyList<string> generatedImages,
+        OutputImageFormat outputImageFormat,
         CancellationToken cancellationToken = default)
     {
         if (generatedImages.Count == 0)
@@ -96,7 +115,11 @@ public sealed class ProcessReviewService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var (mimeType, base64Data) = ImageDataHelpers.ParseDataUrl(generatedImages[index]);
+            var outputDataUrl = await ImageDataHelpers.ConvertDataUrlForOutputFormatAsync(
+                generatedImages[index],
+                outputImageFormat,
+                cancellationToken);
+            var (mimeType, base64Data) = ImageDataHelpers.ParseDataUrl(outputDataUrl);
             var extension = ImageDataHelpers.MimeTypeToExtension(mimeType);
             var variationFileName = $"variation_{index + 1}.{extension}";
             var variationAbsolutePath = Path.Combine(item.VariationFolderPath, variationFileName);

@@ -4,7 +4,10 @@ namespace NanoBananaProWinUI.Services;
 
 public sealed class ZipProcessingService
 {
-    public async Task<byte[]> CreateBatchZipAsync(IReadOnlyList<BatchGenerationResult> results, CancellationToken cancellationToken = default)
+    public async Task<byte[]> CreateBatchZipAsync(
+        IReadOnlyList<BatchGenerationResult> results,
+        OutputImageFormat outputImageFormat,
+        CancellationToken cancellationToken = default)
     {
         await using var outputMemoryStream = new MemoryStream();
         using (var archive = new ZipArchive(outputMemoryStream, ZipArchiveMode.Create, leaveOpen: true))
@@ -21,7 +24,11 @@ public sealed class ZipProcessingService
 
                 for (var i = 0; i < result.GeneratedImages.Count; i++)
                 {
-                    var (mimeType, base64Data) = ImageDataHelpers.ParseDataUrl(result.GeneratedImages[i]);
+                    var outputDataUrl = await ImageDataHelpers.ConvertDataUrlForOutputFormatAsync(
+                        result.GeneratedImages[i],
+                        outputImageFormat,
+                        cancellationToken);
+                    var (mimeType, base64Data) = ImageDataHelpers.ParseDataUrl(outputDataUrl);
                     var extension = ImageDataHelpers.MimeTypeToExtension(mimeType);
                     var entryPath = $"{basePath}/variation_{i + 1}.{extension}";
 
