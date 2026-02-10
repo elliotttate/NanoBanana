@@ -1,0 +1,746 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Page
+    x:Class="NanoBananaProWinUI.Views.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:NanoBananaProWinUI.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:models="using:NanoBananaProWinUI.Models"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    x:DefaultBindMode="OneWay"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+    KeyDown="MainPage_KeyDown"
+    SizeChanged="MainPage_SizeChanged"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        <converters:LogTypeToBrushConverter x:Key="LogTypeToBrushConverter" />
+    </Page.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid
+            x:Name="AppTitleBar"
+            Grid.Row="0"
+            Padding="12,0"
+            Background="{StaticResource TopBarBackgroundBrush}"
+            BorderBrush="{StaticResource TopBarBorderBrush}"
+            BorderThickness="0,0,0,1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="TitleBarLeftPaddingColumn" Width="0" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:Name="TitleBarRightPaddingColumn" Width="0" />
+            </Grid.ColumnDefinitions>
+
+            <FontIcon
+                Grid.Column="1"
+                Margin="0,0,10,0"
+                VerticalAlignment="Center"
+                Foreground="{StaticResource AccentBrush}"
+                Glyph="&#xE7C3;" />
+
+            <TextBlock
+                Grid.Column="2"
+                VerticalAlignment="Center"
+                Foreground="{StaticResource TitleBrush}"
+                FontSize="15"
+                FontWeight="SemiBold"
+                Text="NanoBanana" />
+
+            <CommandBar
+                Grid.Column="4"
+                DefaultLabelPosition="Collapsed"
+                IsDynamicOverflowEnabled="True"
+                OverflowButtonVisibility="Auto"
+                Background="Transparent">
+                <AppBarButton
+                    Click="UploadButton_Click"
+                    Label="Upload"
+                    ToolTipService.ToolTip="Upload image or ZIP">
+                    <AppBarButton.Icon>
+                        <SymbolIcon Symbol="OpenFile" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton
+                    Click="GenerateButton_Click"
+                    IsEnabled="{x:Bind ViewModel.CanGenerate, Mode=OneWay}"
+                    Label="Generate"
+                    ToolTipService.ToolTip="Generate AI edits">
+                    <AppBarButton.Icon>
+                        <SymbolIcon Symbol="Refresh" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton
+                    Click="SaveSelectedButton_Click"
+                    IsEnabled="{x:Bind ViewModel.CanSaveSelectedImage, Mode=OneWay}"
+                    Label="Save"
+                    ToolTipService.ToolTip="Save selected image">
+                    <AppBarButton.Icon>
+                        <SymbolIcon Symbol="Save" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton
+                    Click="DownloadBatchButton_Click"
+                    IsEnabled="{x:Bind ViewModel.CanDownloadBatchZip, Mode=OneWay}"
+                    Label="Export"
+                    ToolTipService.ToolTip="Export batch ZIP">
+                    <AppBarButton.Icon>
+                        <SymbolIcon Symbol="Download" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton
+                    Click="SettingsButton_Click"
+                    Label="Settings"
+                    ToolTipService.ToolTip="App settings">
+                    <AppBarButton.Icon>
+                        <SymbolIcon Symbol="Setting" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarSeparator />
+                <AppBarToggleButton
+                    IsChecked="{x:Bind ViewModel.IsLogsVisible, Mode=TwoWay}"
+                    Label="Logs"
+                    ToolTipService.ToolTip="Show or hide logs panel">
+                    <AppBarToggleButton.Icon>
+                        <SymbolIcon Symbol="List" />
+                    </AppBarToggleButton.Icon>
+                </AppBarToggleButton>
+                <AppBarButton
+                    Click="ClearLogsButton_Click"
+                    Label="Clear Logs"
+                    ToolTipService.ToolTip="Clear logs">
+                    <AppBarButton.Icon>
+                        <SymbolIcon Symbol="Delete" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+            </CommandBar>
+        </Grid>
+
+        <ScrollViewer
+            Grid.Row="1"
+            HorizontalScrollMode="Disabled"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto"
+            VerticalScrollMode="Enabled">
+            <Grid
+                x:Name="MainContentGrid"
+                Margin="12"
+                ColumnSpacing="14"
+                RowSpacing="14">
+                <Grid.RowDefinitions>
+                    <RowDefinition x:Name="MainContentRow0" Height="Auto" />
+                    <RowDefinition x:Name="MainContentRow1" Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="MainContentColumn0" Width="*" />
+                    <ColumnDefinition x:Name="MainContentColumn1" Width="0" />
+                </Grid.ColumnDefinitions>
+
+                <Border
+                    x:Name="ControlsPanel"
+                    Grid.Row="0"
+                    Grid.Column="0"
+                    Style="{StaticResource CardBorderStyle}"
+                    MinHeight="640">
+                    <ScrollViewer
+                        HorizontalScrollMode="Disabled"
+                        HorizontalScrollBarVisibility="Disabled"
+                        VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="14">
+                            <InfoBar
+                                IsClosable="False"
+                                IsIconVisible="True"
+                                IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                                Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                                Severity="Error" />
+
+                            <Border Style="{StaticResource CardBorderStyle}">
+                                <StackPanel Spacing="10">
+                                    <TextBlock
+                                        Style="{StaticResource SectionTitleStyle}"
+                                        Margin="0"
+                                        Text="Mode" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <ToggleButton
+                                            x:Name="SingleModeToggle"
+                                            Click="SingleModeToggle_Click"
+                                            IsChecked="{x:Bind ViewModel.IsSingleMode, Mode=OneWay}"
+                                            Style="{StaticResource ModeToggleStyle}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xE91B;" />
+                                                <TextBlock Text="Single Image" />
+                                            </StackPanel>
+                                        </ToggleButton>
+                                        <ToggleButton
+                                            x:Name="BatchModeToggle"
+                                            Click="BatchModeToggle_Click"
+                                            IsChecked="{x:Bind ViewModel.IsBatchMode, Mode=OneWay}"
+                                            Style="{StaticResource ModeToggleStyle}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xE7B8;" />
+                                                <TextBlock Text="Batch" />
+                                            </StackPanel>
+                                        </ToggleButton>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource CardBorderStyle}">
+                                <StackPanel Spacing="10">
+                                    <TextBlock
+                                        Style="{StaticResource SectionTitleStyle}"
+                                        Margin="0"
+                                        Text="1. Upload Source" />
+                                    <Button
+                                        Click="UploadButton_Click"
+                                        Style="{StaticResource PrimaryActionButtonStyle}">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <FontIcon Glyph="{x:Bind ViewModel.UploadGlyph}" />
+                                            <TextBlock Text="{x:Bind ViewModel.UploadButtonText, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Button>
+                                    <TextBlock
+                                        Foreground="{StaticResource BodyBrush}"
+                                        Text="{x:Bind ViewModel.OriginalFileLabel, Mode=OneWay}"
+                                        Visibility="{x:Bind ViewModel.ShowOriginalFileInfo, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                    <TextBlock
+                                        Foreground="{StaticResource SuccessBrush}"
+                                        FontWeight="SemiBold"
+                                        Text="{x:Bind ViewModel.BatchFoundText, Mode=OneWay}"
+                                        Visibility="{x:Bind ViewModel.ShowBatchInfo, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource CardBorderStyle}">
+                                <StackPanel Spacing="10">
+                                    <TextBlock
+                                        Style="{StaticResource SectionTitleStyle}"
+                                        Margin="0"
+                                        Text="2. Describe Your Edit" />
+                                    <TextBox
+                                        AcceptsReturn="True"
+                                        Height="140"
+                                        IsEnabled="{x:Bind ViewModel.CanEditPrompt, Mode=OneWay}"
+                                        PlaceholderText="{x:Bind ViewModel.PromptPlaceholder, Mode=OneWay}"
+                                        Text="{x:Bind ViewModel.Prompt, Mode=TwoWay}"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource CardBorderStyle}">
+                                <StackPanel Spacing="10">
+                                    <TextBlock
+                                        Style="{StaticResource SectionTitleStyle}"
+                                        Margin="0"
+                                        Text="3. Resolution" />
+                                    <ComboBox SelectedItem="{x:Bind ViewModel.ImageSize, Mode=TwoWay}">
+                                        <x:String>1K</x:String>
+                                        <x:String>2K</x:String>
+                                        <x:String>4K</x:String>
+                                    </ComboBox>
+                                    <TextBlock
+                                        Style="{StaticResource HintTextStyle}"
+                                        Text="Higher resolutions can increase generation time." />
+                                </StackPanel>
+                            </Border>
+
+                            <Button
+                                Click="GenerateButton_Click"
+                                IsEnabled="{x:Bind ViewModel.CanGenerate, Mode=OneWay}"
+                                Style="{StaticResource PrimaryActionButtonStyle}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <ProgressRing
+                                        Width="16"
+                                        Height="16"
+                                        IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}"
+                                        Visibility="{x:Bind ViewModel.IsLoading, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                    <FontIcon
+                                        Glyph="&#xE8A5;"
+                                        Visibility="{x:Bind ViewModel.IsLoading, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}" />
+                                    <TextBlock Text="{x:Bind ViewModel.GenerateButtonText, Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+
+                <Border
+                    x:Name="ResultsPanel"
+                    Grid.Row="1"
+                    Grid.Column="0"
+                    Style="{StaticResource CardBorderStyle}"
+                    VerticalAlignment="Top"
+                    Visibility="{x:Bind ViewModel.ShowResultsPanel, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <Grid>
+                        <Grid Visibility="{x:Bind ViewModel.IsSingleMode, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <StackPanel
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Visibility="{x:Bind ViewModel.ShowSingleLoadingState, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <ProgressRing Width="56" Height="56" IsActive="True" />
+                                <TextBlock
+                                    Margin="0,16,0,0"
+                                    Style="{StaticResource BodyTextStyle}"
+                                    FontSize="16"
+                                    Text="{x:Bind ViewModel.LoadingMessage, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <Border
+                                Padding="10"
+                                CornerRadius="12"
+                                Background="#14000000"
+                                Visibility="{x:Bind ViewModel.ShowSingleOriginalState, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Image
+                                    MaxHeight="560"
+                                    HorizontalAlignment="Stretch"
+                                    Source="{x:Bind ViewModel.OriginalPreviewImage, Mode=OneWay}"
+                                    Stretch="Uniform" />
+                            </Border>
+
+                            <Grid Visibility="{x:Bind ViewModel.ShowSingleGeneratedState, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Grid.Row="0" Margin="0,0,0,12" Spacing="8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock
+                                            Style="{StaticResource SectionTitleStyle}"
+                                            Margin="0"
+                                            FontSize="16"
+                                            Text="Variations (1-4)" />
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            Spacing="8"
+                                            VerticalAlignment="Center">
+                                            <TextBlock
+                                                Style="{StaticResource HintTextStyle}"
+                                                VerticalAlignment="Center"
+                                                Text="Size" />
+                                            <Slider
+                                                Width="150"
+                                                Minimum="70"
+                                                Maximum="150"
+                                                StepFrequency="5"
+                                                Value="{x:Bind ViewModel.ResultScalePercent, Mode=TwoWay}" />
+                                            <TextBlock
+                                                Style="{StaticResource HintTextStyle}"
+                                                VerticalAlignment="Center"
+                                                Text="{x:Bind ViewModel.ResultScaleLabel, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <GridView
+                                        x:Name="GeneratedImagesGridView"
+                                        IsItemClickEnabled="False"
+                                        ItemsSource="{x:Bind ViewModel.GeneratedImages, Mode=OneWay}"
+                                        SelectedItem="{x:Bind ViewModel.SelectedGeneratedImage, Mode=TwoWay}"
+                                        SelectionMode="Single">
+                                        <GridView.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <ItemsWrapGrid Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </GridView.ItemsPanel>
+                                        <GridView.ItemTemplate>
+                                            <DataTemplate x:DataType="models:GeneratedImageVariation">
+                                                <Border
+                                                    Width="148"
+                                                    Height="148"
+                                                    CornerRadius="12"
+                                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                                    BorderThickness="1"
+                                                    Background="{StaticResource PanelElevatedBrush}">
+                                                    <Grid>
+                                                        <Image Source="{x:Bind PreviewImage}" Stretch="UniformToFill" />
+                                                        <Border
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Top"
+                                                            Margin="6"
+                                                            Padding="8,3"
+                                                            CornerRadius="20"
+                                                            Background="#A0000000">
+                                                            <TextBlock
+                                                                Foreground="White"
+                                                                FontSize="12"
+                                                                FontWeight="SemiBold"
+                                                                Text="{x:Bind Index}" />
+                                                        </Border>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </GridView.ItemTemplate>
+                                    </GridView>
+                                </StackPanel>
+
+                                <Border
+                                    Grid.Row="1"
+                                    Height="{x:Bind ViewModel.SingleResultViewportHeight, Mode=OneWay}"
+                                    Padding="10"
+                                    CornerRadius="12"
+                                    Background="#16000000"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1">
+                                    <Grid x:Name="ComparisonSurface" SizeChanged="ComparisonSurface_SizeChanged">
+                                        <Image
+                                            HorizontalAlignment="Stretch"
+                                            Source="{x:Bind ViewModel.OriginalPreviewImage, Mode=OneWay}"
+                                            Stretch="Uniform"
+                                            VerticalAlignment="Stretch" />
+
+                                        <Border x:Name="GeneratedImageHost">
+                                            <Border.Clip>
+                                                <RectangleGeometry x:Name="GeneratedImageClip" />
+                                            </Border.Clip>
+                                            <Image
+                                                HorizontalAlignment="Stretch"
+                                                Source="{x:Bind ViewModel.SelectedGeneratedPreviewImage, Mode=OneWay}"
+                                                Stretch="Uniform"
+                                                VerticalAlignment="Stretch" />
+                                        </Border>
+
+                                        <Border
+                                            Background="#B7151C2A"
+                                            CornerRadius="12"
+                                            Margin="24"
+                                            Padding="14"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Visibility="{x:Bind ViewModel.HasSelectedGeneratedImage, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
+                                            <TextBlock
+                                                Foreground="{StaticResource TitleBrush}"
+                                                FontSize="16"
+                                                FontWeight="SemiBold"
+                                                Text="Select a variation below to compare"
+                                                TextAlignment="Center" />
+                                        </Border>
+
+                                        <Canvas
+                                            x:Name="ComparisonInteractionLayer"
+                                            Background="Transparent"
+                                            PointerCanceled="ComparisonInteractionLayer_PointerReleased"
+                                            PointerCaptureLost="ComparisonInteractionLayer_PointerReleased"
+                                            PointerMoved="ComparisonInteractionLayer_PointerMoved"
+                                            PointerPressed="ComparisonInteractionLayer_PointerPressed"
+                                            PointerReleased="ComparisonInteractionLayer_PointerReleased"
+                                            Tapped="ComparisonInteractionLayer_Tapped"
+                                            Visibility="{x:Bind ViewModel.HasSelectedGeneratedImage, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <Border
+                                                x:Name="ComparisonDivider"
+                                                Width="2"
+                                                Height="{Binding ElementName=ComparisonSurface, Path=ActualHeight}"
+                                                Background="{StaticResource AccentSecondaryBrush}">
+                                                <Border
+                                                    Width="32"
+                                                    Height="32"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    CornerRadius="16"
+                                                    BorderBrush="{StaticResource AppPageBackgroundBrush}"
+                                                    BorderThickness="2"
+                                                    Background="{StaticResource AccentBrush}">
+                                                    <FontIcon
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Foreground="White"
+                                                        Glyph="&#xE8A3;" />
+                                                </Border>
+                                            </Border>
+                                        </Canvas>
+                                    </Grid>
+                                </Border>
+
+                                <StackPanel Grid.Row="2" Margin="0,14,0,0" Spacing="4">
+                                    <Slider
+                                        Maximum="100"
+                                        Minimum="0"
+                                        Value="{x:Bind ViewModel.ComparisonValue, Mode=TwoWay}"
+                                        ValueChanged="ComparisonSlider_ValueChanged"
+                                        IsEnabled="{x:Bind ViewModel.HasSelectedGeneratedImage, Mode=OneWay}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock
+                                            Grid.Column="0"
+                                            Style="{StaticResource HintTextStyle}"
+                                            Text="Original" />
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            Style="{StaticResource HintTextStyle}"
+                                            Text="{x:Bind ViewModel.ImageSize, Mode=OneWay}" />
+                                    </Grid>
+                                </StackPanel>
+
+                                <Button
+                                    Grid.Row="3"
+                                    Margin="0,16,0,0"
+                                    Click="SaveSelectedButton_Click"
+                                    IsEnabled="{x:Bind ViewModel.CanSaveSelectedImage, Mode=OneWay}"
+                                    Style="{StaticResource PositiveActionButtonStyle}">
+                                    <StackPanel
+                                        HorizontalAlignment="Center"
+                                        Orientation="Horizontal"
+                                        Spacing="10">
+                                        <FontIcon Glyph="&#xE74E;" />
+                                        <TextBlock Text="Save Selected Image" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </Grid>
+
+                        <Grid Visibility="{x:Bind ViewModel.IsBatchMode, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <StackPanel
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Visibility="{x:Bind ViewModel.ShowBatchEmptyState, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <FontIcon
+                                    FontSize="64"
+                                    Foreground="{StaticResource SubtleBrush}"
+                                    Glyph="&#xE7B8;" />
+                                <TextBlock
+                                    Margin="0,14,0,0"
+                                    Style="{StaticResource BodyTextStyle}"
+                                    FontSize="16"
+                                    Text="Upload a ZIP file with images to start batch processing." />
+                            </StackPanel>
+                            <StackPanel
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Visibility="{x:Bind ViewModel.ShowBatchInitializingState, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <ProgressRing Width="56" Height="56" IsActive="True" />
+                                <TextBlock
+                                    Margin="0,16,0,0"
+                                    Style="{StaticResource BodyTextStyle}"
+                                    FontSize="16"
+                                    Text="{x:Bind ViewModel.LoadingMessage, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <StackPanel
+                                MaxWidth="760"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Center"
+                                Spacing="12"
+                                Visibility="{x:Bind ViewModel.ShowBatchReadyState, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <TextBlock
+                                    Style="{StaticResource SectionTitleStyle}"
+                                    Margin="0"
+                                    FontSize="24"
+                                    Text="Files to Process" />
+
+                                <Border
+                                    CornerRadius="12"
+                                    Background="{StaticResource PanelElevatedBrush}"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1"
+                                    Padding="8">
+                                    <ListView
+                                        Height="380"
+                                        IsItemClickEnabled="False"
+                                        ItemsSource="{x:Bind ViewModel.BatchFiles, Mode=OneWay}"
+                                        SelectionMode="None">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="models:BatchFileItem">
+                                                <Border
+                                                    Margin="0,0,0,6"
+                                                    Padding="10,8"
+                                                    CornerRadius="8"
+                                                    Background="#182438">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock
+                                                            Style="{StaticResource BodyTextStyle}"
+                                                            Text="{x:Bind Name}"
+                                                            TextTrimming="CharacterEllipsis" />
+                                                        <Border
+                                                            Grid.Column="1"
+                                                            Padding="8,3"
+                                                            CornerRadius="999"
+                                                            Background="#304566">
+                                                            <TextBlock
+                                                                Foreground="{StaticResource BodyBrush}"
+                                                                FontFamily="Cascadia Mono"
+                                                                FontSize="11"
+                                                                Text="{x:Bind ShortType}" />
+                                                        </Border>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </Border>
+
+                                <TextBlock
+                                    Style="{StaticResource HintTextStyle}"
+                                    FontSize="14"
+                                    Text="{x:Bind ViewModel.BatchSummaryText, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <StackPanel
+                                MaxWidth="700"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Spacing="14"
+                                Visibility="{x:Bind ViewModel.ShowBatchLoadingState, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <TextBlock
+                                    HorizontalAlignment="Center"
+                                    Style="{StaticResource SectionTitleStyle}"
+                                    Margin="0"
+                                    FontSize="28"
+                                    Text="Processing Batch..." />
+                                <ProgressBar
+                                    Height="14"
+                                    Maximum="100"
+                                    MinWidth="560"
+                                    Value="{x:Bind ViewModel.BatchProgressPercent, Mode=OneWay}" />
+                                <TextBlock
+                                    HorizontalAlignment="Center"
+                                    Style="{StaticResource BodyTextStyle}"
+                                    FontSize="18"
+                                    Text="{x:Bind ViewModel.BatchProgressText, Mode=OneWay}" />
+                                <TextBlock
+                                    HorizontalAlignment="Center"
+                                    Style="{StaticResource HintTextStyle}"
+                                    FontSize="14"
+                                    Text="{x:Bind ViewModel.LoadingMessage, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <StackPanel
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Spacing="14"
+                                Visibility="{x:Bind ViewModel.ShowBatchCompleteState, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <FontIcon
+                                    FontSize="70"
+                                    Foreground="{StaticResource SuccessBrush}"
+                                    Glyph="&#xE73E;" />
+                                <TextBlock
+                                    HorizontalAlignment="Center"
+                                    Style="{StaticResource SectionTitleStyle}"
+                                    Margin="0"
+                                    FontSize="34"
+                                    Text="Batch Complete!" />
+                                <TextBlock
+                                    HorizontalAlignment="Center"
+                                    Style="{StaticResource BodyTextStyle}"
+                                    FontSize="16"
+                                    Text="{x:Bind ViewModel.BatchCompleteText, Mode=OneWay}" />
+                                <Button
+                                    Click="DownloadBatchButton_Click"
+                                    IsEnabled="{x:Bind ViewModel.CanDownloadBatchZip, Mode=OneWay}"
+                                    Style="{StaticResource PositiveActionButtonStyle}">
+                                    <StackPanel
+                                        HorizontalAlignment="Center"
+                                        Orientation="Horizontal"
+                                        Spacing="10">
+                                        <ProgressRing
+                                            Width="18"
+                                            Height="18"
+                                            IsActive="{x:Bind ViewModel.IsZipping, Mode=OneWay}"
+                                            Visibility="{x:Bind ViewModel.IsZipping, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                        <FontIcon
+                                            Glyph="&#xE8A5;"
+                                            Visibility="{x:Bind ViewModel.IsZipping, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}" />
+                                        <TextBlock Text="Download All (ZIP)" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
+        </ScrollViewer>
+
+        <Border
+            Grid.Row="2"
+            Height="220"
+            Margin="12"
+            Visibility="{x:Bind ViewModel.IsLogsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+            Style="{StaticResource CardBorderStyle}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        FontFamily="Cascadia Mono"
+                        Foreground="{StaticResource BodyBrush}"
+                        FontSize="13"
+                        FontWeight="SemiBold"
+                        Text="Console Logs" />
+                    <Button
+                        Grid.Column="1"
+                        Click="ClearLogsButton_Click"
+                        Style="{StaticResource GhostButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE74D;" />
+                            <TextBlock Text="Clear" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <Grid Grid.Row="1">
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        FontStyle="Italic"
+                        Foreground="{StaticResource SubtleBrush}"
+                        Text="No logs yet..."
+                        Visibility="{x:Bind ViewModel.HasLogs, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}" />
+
+                    <ScrollViewer
+                        x:Name="LogsScrollViewer"
+                        VerticalScrollBarVisibility="Auto"
+                        VerticalScrollMode="Enabled"
+                        Visibility="{x:Bind ViewModel.HasLogs, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.Logs, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:LogEntry">
+                                    <StackPanel Margin="0,0,0,4" Orientation="Horizontal" Spacing="8">
+                                        <TextBlock
+                                            Foreground="{StaticResource SubtleBrush}"
+                                            FontFamily="Cascadia Mono"
+                                            FontSize="12"
+                                            Text="{x:Bind Timestamp}" />
+                                        <TextBlock
+                                            Foreground="{Binding Type, Converter={StaticResource LogTypeToBrushConverter}}"
+                                            FontFamily="Cascadia Mono"
+                                            FontSize="12"
+                                            Text="{x:Bind Message}"
+                                            TextWrapping="WrapWholeWords" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

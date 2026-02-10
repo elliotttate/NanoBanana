@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "NanoBananaProWinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "NanoBananaProWinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
