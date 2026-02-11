@@ -1,4 +1,4 @@
-# NanoBanana (WinUI 3)
+# NanoBanana
 
 A dark-theme WinUI 3 desktop app that reproduces the core functionality of `nano-banana-pro-image-editor` in a native Windows experience.
 
