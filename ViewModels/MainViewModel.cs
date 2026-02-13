@@ -481,10 +481,7 @@ public partial class MainViewModel : BaseViewModel
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(Prompt))
-            {
-                Prompt = "Convert these textures to seamless PBR materials, high quality, 8k resolution";
-            }
+            Prompt = "Creatively reimagine / upscale this {File Name} texture in great detail to high definition";
 
             AddLog(
                 $"Found {scanResult.TotalCount} images. Pending: {scanResult.PendingCount}, already processed: {scanResult.ProcessedCount}.",
@@ -845,11 +842,14 @@ public partial class MainViewModel : BaseViewModel
                     var sourceBytes = await File.ReadAllBytesAsync(file.FullPath);
                     var sourceBase64Data = Convert.ToBase64String(sourceBytes);
 
+                    var filePrompt = BuildBatchPrompt(Prompt, file.Name);
+                    AddLog($"Prompt: {filePrompt}", LogType.Info);
+
                     var images = await _geminiImageService.GenerateEditedImagesAsync(
                         key,
                         sourceBase64Data,
                         file.MimeType,
-                        Prompt.Trim(),
+                        filePrompt,
                         ImageSize);
 
                     var outputRelativePaths = await _batchFolderProcessingService.SaveGeneratedOutputsAsync(
@@ -1157,7 +1157,7 @@ public partial class MainViewModel : BaseViewModel
         return memoryStream.ToArray();
     }
 
-    private static string BuildPromptFromFileName(string fileName)
+    private static string FormatFileName(string fileName)
     {
         var nameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
         var imageName = nameWithoutExtension.Replace('_', ' ').Replace('-', ' ');
@@ -1166,12 +1166,18 @@ public partial class MainViewModel : BaseViewModel
             .Select(word => char.ToUpperInvariant(word[0]) + word[1..]);
         var formattedName = string.Join(" ", words);
 
-        if (string.IsNullOrWhiteSpace(formattedName))
-        {
-            formattedName = "Texture";
-        }
+        return string.IsNullOrWhiteSpace(formattedName) ? "Texture" : formattedName;
+    }
 
-        return $"Creatively reimagine / upscale this {formattedName} texture in great detail to high definition";
+    private static string BuildPromptFromFileName(string fileName)
+    {
+        return $"Creatively reimagine / upscale this {FormatFileName(fileName)} texture in great detail to high definition";
+    }
+
+    private static string BuildBatchPrompt(string promptTemplate, string fileName)
+    {
+        var formattedName = FormatFileName(fileName);
+        return promptTemplate.Replace("{File Name}", formattedName, StringComparison.OrdinalIgnoreCase);
     }
 
     private string ResolveApiKey()
